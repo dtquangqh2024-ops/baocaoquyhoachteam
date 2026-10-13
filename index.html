@@ -1840,6 +1840,15 @@ setInterval(() => loadData(false), 300000);
   function joinWithDashboard() {
     const dash = (typeof DATA !== 'undefined' && Array.isArray(DATA)) ? DATA : [];
     const dm = new Map(dash.map((d) => [norm(d.ten), d]));
+    ALL = ALL.filter((o) => !o.synth);
+    // dự án có ở Dashboard nhưng chưa có dòng ở sheet pháp lý -> mặc định "Đang nghiên cứu"
+    const have = new Set(ALL.map((o) => norm(o.name)));
+    dash.forEach((d) => {
+      const n = String(d.ten || '').trim();
+      if (!n || have.has(norm(n))) return;
+      have.add(norm(n));
+      ALL.push({ name: n, synth: true, tinhRaw: '', ctdt: { date: null, so: '', pdf: '', has: false }, qd: { date: null, so: '', pdf: '', banve: '', has: false }, tiendo: '', pct: null, note: '', pos: null, warn: [], status: 'nc' });
+    });
     ALL.forEach((o) => {
       o.dash = dm.get(norm(o.name)) || null;
       o.fromMyMaps = false;
@@ -1854,7 +1863,7 @@ setInterval(() => loadData(false), 300000);
         }
         if (!o.mapsUrl_) o.mapsUrl_ = sh.url;
       }
-      o.has = !!(o.ctdt.has || o.qd.has || o.pos || o.shapes);
+      o.has = !!(o.ctdt.has || o.qd.has || o.pos || o.shapes || o.dash); // có trên Dashboard = đang nghiên cứu
       if (o.pos && o.pos.ok) { o.x = projX(o.pos.lng); o.y = projY(o.pos.lat); }
       o.prov = resolveProv(o.tinhRaw) || (o.pos && o.pos.ok ? provAt(o.x, o.y) : null) || (o.dash ? resolveProv(o.dash.diadiem) : null);
       o.banve = o.qd.banve || (o.dash ? su(o.dash.banveQH500) : '');
@@ -1974,7 +1983,7 @@ setInterval(() => loadData(false), 300000);
     if (bad.length) out.push('<b>' + bad.length + ' dòng cần kiểm tra lại dữ liệu</b>: ' + esc(bad.map((o) => o.name + ' (' + wl(o).join('; ') + ')').join(' | ')));
     if (shapesState === 'err') out.push('<b>Chưa đọc được vị trí từ link My Maps ở Dashboard</b>: ' + esc(shapesMsg));
     const noPos = LEGAL.filter((o) => !(o.pos && o.pos.ok)).map((o) => o.name);
-    if (noPos.length) out.push('<b>' + noPos.length + ' dự án chưa có vị trí Google Maps</b> nên chưa hiện trên bản đồ (điền cột "Vị trí Google Maps" hoặc dán link My Maps vào Dashboard): ' + esc(noPos.join('; ')));
+    if (noPos.length) out.push('<b>' + noPos.length + ' dự án chưa có ranh giới/vị trí</b> nên chưa hiện trên bản đồ (dán link My Maps vào cột "Maps (ranh giới dự án)" ở Dashboard, hoặc điền cột "Vị trí Google Maps" ở sheet pháp lý): ' + esc(noPos.join('; ')));
     const hidden = ALL.filter((o) => !o.has && (o.tiendo || o.pct != null || o.note)).map((o) => o.name);
     if (hidden.length) out.push('<b>' + hidden.length + ' dòng đang ẩn</b> vì chưa có chủ trương, quyết định hay vị trí (dù đã ghi tiến độ/ghi chú): ' + esc(hidden.join('; ')));
     $('lgWarn').innerHTML = out.length ? '<details class="lg-note"><summary>⚠ ' + out.length + ' lưu ý về dữ liệu — bấm để xem</summary><div style="margin-top:6px">' + out.join('<br><br>') + '</div></details>' : '';
