@@ -2446,6 +2446,8 @@ setInterval(() => loadData(false), 300000);
     $('mpStats').innerHTML = box('all', ids.length, 'Dự án trên bản đồ', tot) + box('qd', st.qd[0], 'Đã có QĐ phê duyệt', st.qd[1]) + box('ctdt', st.ctdt[0], 'Đã duyệt CTĐT', st.ctdt[1]) + box('nc', st.nc[0], 'Đang nghiên cứu', st.nc[1]);
     $('mpStatNote').textContent = noArea ? 'Diện tích lấy từ dữ liệu nhập ở Dashboard; ' + noArea + ' dự án chưa có số liệu diện tích nên chưa cộng vào.' : 'Diện tích lấy từ dữ liệu nhập ở Dashboard.';
   }
+  const firstUrl = (v) => { const m = String(v == null ? '' : v).match(/https?:\/\/[^\s<>"']+/i); return m ? m[0] : ''; };
+  const dashBtns = (o) => !o.dash ? '' : btn(firstUrl(o.dash.banveDeXuat), '📐 Bản vẽ đề xuất') + btn(firstUrl(o.dash.video), '🎥 Video hiện trạng');
   function sumHtml(o) {
     const lines = String(o.dash.tomtat).split(/\r?\n+/).map((x) => x.trim()).filter(Boolean);
     const hi = (t) => esc(t).replace(/(di[eệ]n t[ií]ch|t[aầ]ng cao|s[oố] t[aầ]ng|m[aậ]t độ|quy m[oô]|d[aâ]n s[oố]|h[eệ] s[oố]|t[oổ]ng m[uứ]c đ[aầ]u t[uư]|[\d][\d.,]*\s*(?:ha|m2|m²|t[aầ]ng|căn|người))/gi, '<b>$1</b>');
@@ -2456,8 +2458,8 @@ setInterval(() => loadData(false), 300000);
     return '<div class="mp-item ' + o.status + '"><b>' + esc(o.name) + '</b><div class="m"><span class="lg-badge ' + o.status + '">' + ST[o.status].label + '</span>' + (o.prov ? ' <span>📍 ' + esc(o.prov.name) + '</span>' : '') + (o.areaHa ? ' <span>· ' + fmtHa(o.areaHa) + ' ha</span>' : '') + '<br>' +
       (o.ctdt.has ? 'CTĐT: ' + (o.ctdt.date ? fmt(o.ctdt.date) : 'chưa nhập ngày') + so(o.ctdt.so) + '<br>' : '') + (o.qd.has ? 'QĐ phê duyệt: ' + (o.qd.date ? fmt(o.qd.date) : 'chưa nhập ngày') + so(o.qd.so) + '<br>' : '') +
       (o.tiendo ? 'Tiến độ: ' + esc(o.tiendo) + (o.pct != null ? ' (' + o.pct + '%)' : '') : (o.pct != null ? 'Tiến độ: ' + o.pct + '%' : '')) + '</div>' +
-      (full && o.dash && o.dash.tomtat ? '<div class="mp-sum"><div class="k">Tóm tắt dự án (từ Dashboard)</div>' + sumHtml(o) + '</div>' : '') +
-      '<div class="lg-btns">' + docBtns(o) + btn(o.mapsUrl, '📍 GG Maps') +
+      (full && o.dash && o.dash.tomtat ? '<div class="mp-sum"><div class="k">Tóm tắt dự án</div>' + sumHtml(o) + '</div>' : '') +
+      '<div class="lg-btns">' + docBtns(o) + (full ? dashBtns(o) : '') + btn(o.mapsUrl, '📍 GG Maps') +
       ((o.ctdt.date || o.qd.date) ? '<button class="drawing-btn" data-act="tl" data-i="' + i + '">🕒 Timeline</button>' : '') +
       (full ? '' : '<button class="drawing-btn" data-act="focus" data-i="' + i + '">🎯 Phóng tới đây</button>') + '</div></div>';
   }
