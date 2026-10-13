@@ -1269,6 +1269,8 @@ svg.leaflet-image-layer.leaflet-interactive path {
   .mp-provlbl { background: none; border: 0; }
   .mp-provlbl span { position: absolute; transform: translate(-50%, -50%); white-space: nowrap; font-size: 10.5px; font-weight: 700; color: #a52a17; text-shadow: 0 0 3px #fff, 0 0 3px #fff, 0 0 2px #fff; pointer-events: none; }
   .mp-provlbl.sea span { font-style: italic; color: #1b4f8f; font-weight: 600; }
+  .lg-table td.nt { width: 1%; min-width: 90px; max-width: 160px; font-size: 12px; }
+  .lg-table td .lg-btns { gap: 5px; }
 
 </style>
 </head>
@@ -1742,7 +1744,7 @@ setInterval(() => loadData(false), 300000);
     return null;
   }
 
-  /* ---------- vị trí Google Maps ---------- */
+  /* ---------- vị trí GG Maps ---------- */
   // Nhận: "21.0285, 105.8542" (chuột phải trên Google Maps → bấm vào dòng tọa độ để copy)
   //       hoặc link Google Maps đầy đủ có chứa tọa độ (…@21.02,105.85,17z… hoặc …!3d21.02!4d105.85…)
   const NUM = '-?\\d{1,3}(?:\\.\\d+)?';
@@ -1840,7 +1842,7 @@ setInterval(() => loadData(false), 300000);
       if (o.pos && !o.pos.ok) {
         o.posWarn = (o.pos.reason === 'short' ? 'Vị trí là link rút gọn, không đọc được tọa độ (hãy dán tọa độ hoặc link đầy đủ)'
           : o.pos.reason === 'range' ? 'Tọa độ nằm ngoài Việt Nam, kiểm tra lại'
-          : o.pos.reason === 'nocoord' ? 'Link Google Maps không chứa tọa độ (hãy dán tọa độ dạng 21.0285, 105.8542)'
+          : o.pos.reason === 'nocoord' ? 'Link GG Maps không chứa tọa độ (hãy dán tọa độ dạng 21.0285, 105.8542)'
           : 'Ô vị trí không đọc được ("' + o.pos.raw + '")');
       }
       return o;
@@ -2010,9 +2012,10 @@ setInterval(() => loadData(false), 300000);
     const so = x.so ? ' <span class="so">· ' + esc(x.so) + '</span>' : '';
     return x.date ? fmt(x.date) + so : '<span class="none">chưa nhập ngày</span>' + so;
   }
+  const docBtns = (o) => { const h = btn(o.ctdt.pdf, '📄 CTĐT') + btn(o.qd.pdf, '📄 QĐPD') + (o.qd.has ? btn(o.banve, '📐 Bản vẽ') : ''); return h ? '<span class="btn-pair">' + h + '</span>' : ''; };
   function linkBtns(o, withAct, i) {
-    return btn(o.ctdt.pdf, '📄 Văn bản CTĐT') + '<span class="btn-pair">' + btn(o.qd.pdf, '📄 Quyết định') + (o.qd.has ? btn(o.banve, '📐 Bản vẽ') : '') + '</span>' +
-      btn(o.mapsUrl, '📍 Google Maps') +
+    return docBtns(o) +
+      btn(o.mapsUrl, '📍 GG Maps') +
       (withAct ? ((o.ctdt.date || o.qd.date) ? '<button class="drawing-btn" data-act="tl" data-i="' + i + '">🕒 Timeline</button>' : '') +
         ((o.shapes || (o.pos && o.pos.ok)) ? '<button class="drawing-btn" data-act="map" data-i="' + i + '">🗺 Xem trên bản đồ</button>' : '') : '');
   }
@@ -2040,8 +2043,7 @@ setInterval(() => loadData(false), 300000);
     { k: 'name', t: 'Dự án', sort: true },
     { k: 'status', t: 'Trạng thái', sort: true },
     { k: 'ctdt', t: 'Duyệt CTĐT', sort: true },
-    { k: 'qd', t: 'QĐ phê duyệt đồ án', sort: true },
-    { k: 'prog', t: 'Tiến độ' },
+    { k: 'qd', t: 'Duyệt QĐPD', sort: true },
     { k: 'act', t: 'Mở nhanh' },
     { k: 'note', t: 'Ghi chú' }
   ];
@@ -2058,12 +2060,11 @@ setInterval(() => loadData(false), 300000);
     return '<tr>' +
       '<td class="nm" style="--c:' + col + '"><div class="t">' + esc(o.name) + '</div><div class="s">' + (o.prov ? '📍 ' + esc(o.prov.name) : 'Chưa rõ tỉnh/thành') + (o.dash && o.dash.theloai ? ' · ' + esc(o.dash.theloai) : '') + '</div></td>' +
       '<td><span class="lg-badge ' + o.status + '">' + ST[o.status].label + '</span></td>' +
-      '<td>' + stepCell(o.ctdt, o.ctdt.pdf ? '<div class="lg-btns">' + btn(o.ctdt.pdf, '📄 Văn bản') + '</div>' : '') + '</td>' +
-      '<td>' + stepCell(o.qd, (o.qd.pdf || (o.qd.has && o.banve)) ? '<div class="lg-btns">' + btn(o.qd.pdf, '📄 Quyết định') + (o.qd.has ? btn(o.banve, '📐 Bản vẽ') : '') + '</div>' : '') + '</td>' +
-      '<td>' + ((o.tiendo || o.pct != null) ? (o.tiendo ? '<div>' + esc(o.tiendo) + '</div>' : '') + (o.pct != null ? '<div class="lg-prog"><i style="width:' + o.pct + '%"></i></div><div class="lg-pct">' + o.pct + '%</div>' : '') : '<span class="none">—</span>') + '</td>' +
-      '<td><div class="lg-btns">' + (btn(o.mapsUrl, '📍 Google Maps') +
+      '<td>' + stepCell(o.ctdt) + '</td>' +
+      '<td>' + stepCell(o.qd) + '</td>' +
+      '<td><div class="lg-btns">' + (docBtns(o) + btn(o.mapsUrl, '📍 GG Maps') +
         ((o.ctdt.date || o.qd.date) ? '<button class="drawing-btn" data-act="tl" data-i="' + i + '">🕒 Timeline</button>' : '') +
-        (o.pos && o.pos.ok ? '<button class="drawing-btn" data-act="map" data-i="' + i + '">🗺 Bản đồ</button>' : '')) + '</div></td>' +
+        ((o.shapes || (o.pos && o.pos.ok)) ? '<button class="drawing-btn" data-act="map" data-i="' + i + '">🗺 Bản đồ</button>' : '')) + '</div></td>' +
       '<td class="nt">' + (o.note ? esc(o.note) : '<span class="none">—</span>') + '</td></tr>';
   }
   function sortedIdx(idx) {
@@ -2098,7 +2099,7 @@ setInterval(() => loadData(false), 300000);
     $('lgViewTable').classList.toggle('active', LS.view === 'table');
     $('lgGrid').style.display = LS.view === 'card' ? '' : 'none';
     $('lgTableWrap').style.display = LS.view === 'table' ? '' : 'none';
-    const empty = '<div class="lg-empty" style="grid-column:1/-1">' + (LEGAL.length ? 'Không có dự án phù hợp.' : 'Chưa có dự án nào có thông tin. Điền ngày/văn bản chủ trương, quyết định phê duyệt hoặc vị trí Google Maps trong sheet pháp lý, dự án sẽ tự hiện ở đây.') + '</div>';
+    const empty = '<div class="lg-empty" style="grid-column:1/-1">' + (LEGAL.length ? 'Không có dự án phù hợp.' : 'Chưa có dự án nào có thông tin. Điền ngày/văn bản chủ trương, quyết định phê duyệt hoặc vị trí GG Maps trong sheet pháp lý, dự án sẽ tự hiện ở đây.') + '</div>';
     if (LS.view === 'card') {
       $('lgGrid').innerHTML = idx.length ? idx.map((i) => cardHtml(LEGAL[i], i)).join('') : empty;
     } else {
@@ -2194,11 +2195,11 @@ setInterval(() => loadData(false), 300000);
     const so = (x) => (x ? ' · ' + esc(x) : '');
     let items = '';
     if (o.ctdt.date) {
-      items += '<li class="st-item ctdt"><div class="t">Duyệt CTĐT</div><div class="d">' + fmt(o.ctdt.date) + so(o.ctdt.so) + '</div>' + (o.ctdt.pdf ? '<div class="lg-btns">' + btn(o.ctdt.pdf, '📄 Văn bản CTĐT') + '</div>' : '') + '</li>';
+      items += '<li class="st-item ctdt"><div class="t">Duyệt CTĐT</div><div class="d">' + fmt(o.ctdt.date) + so(o.ctdt.so) + '</div>' + (o.ctdt.pdf ? '<div class="lg-btns">' + btn(o.ctdt.pdf, '📄 CTĐT') + '</div>' : '') + '</li>';
     }
     if (o.qd.date) {
       items += '<li class="st-item qd"><div class="t">QĐ phê duyệt đồ án' + (o.ctdt.date ? '<span class="st-gap">sau ' + gapText(o.ctdt.date, o.qd.date) + '</span>' : '') + '</div><div class="d">' + fmt(o.qd.date) + so(o.qd.so) + '</div>' +
-        '<div class="lg-btns">' + btn(o.qd.pdf, '📄 Quyết định phê duyệt') + btn(o.banve, '📐 Bản vẽ đã duyệt') + '</div></li>';
+        '<div class="lg-btns">' + btn(o.qd.pdf, '📄 QĐPD') + btn(o.banve, '📐 Bản vẽ') + '</div></li>';
     } else if (o.ctdt.date) {
       items += '<li class="st-item wait"><div class="t">Chờ QĐ phê duyệt đồ án<span class="st-gap">đã ' + gapText(o.ctdt.date, today) + ' kể từ CTĐT</span></div></li>';
     }
@@ -2429,7 +2430,7 @@ setInterval(() => loadData(false), 300000);
     return '<div class="mp-item ' + o.status + '"><b>' + esc(o.name) + '</b><div class="m"><span class="lg-badge ' + o.status + '">' + ST[o.status].label + '</span>' + (o.prov ? ' <span>📍 ' + esc(o.prov.name) + '</span>' : '') + (o.areaHa ? ' <span>· ' + fmtHa(o.areaHa) + ' ha</span>' : '') + '<br>' +
       (o.ctdt.has ? 'CTĐT: ' + (o.ctdt.date ? fmt(o.ctdt.date) : 'chưa nhập ngày') + so(o.ctdt.so) + '<br>' : '') + (o.qd.has ? 'QĐ phê duyệt: ' + (o.qd.date ? fmt(o.qd.date) : 'chưa nhập ngày') + so(o.qd.so) + '<br>' : '') +
       (o.tiendo ? 'Tiến độ: ' + esc(o.tiendo) + (o.pct != null ? ' (' + o.pct + '%)' : '') : (o.pct != null ? 'Tiến độ: ' + o.pct + '%' : '')) + '</div>' +
-      '<div class="lg-btns">' + btn(o.ctdt.pdf, '📄 Văn bản CTĐT') + '<span class="btn-pair">' + btn(o.qd.pdf, '📄 Quyết định') + (o.qd.has ? btn(o.banve, '📐 Bản vẽ') : '') + '</span>' + btn(o.mapsUrl, '📍 Google Maps') +
+      '<div class="lg-btns">' + docBtns(o) + btn(o.mapsUrl, '📍 GG Maps') +
       ((o.ctdt.date || o.qd.date) ? '<button class="drawing-btn" data-act="tl" data-i="' + i + '">🕒 Timeline</button>' : '') +
       (full ? '' : '<button class="drawing-btn" data-act="focus" data-i="' + i + '">🎯 Phóng tới đây</button>') + '</div></div>';
   }
