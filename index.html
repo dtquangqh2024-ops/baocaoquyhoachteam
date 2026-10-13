@@ -1263,6 +1263,13 @@ svg.leaflet-image-layer.leaflet-interactive path {
   .mp-ptab { width: 100%; border-collapse: collapse; font-size: 12.5px; margin-top: 6px; }
   .mp-ptab td { padding: 3px 4px; border-bottom: 1px solid var(--line); } .mp-ptab td:not(:first-child) { text-align: right; white-space: nowrap; }
 
+  .btn-pair { display: inline-flex; gap: 6px; flex-wrap: nowrap; }
+  .btn-pair .drawing-btn { white-space: nowrap; }
+  @media (max-width: 520px) { .lg-btns { gap: 5px; } .lg-btns .drawing-btn { padding: 6px 9px; font-size: 12px; } }
+  .mp-provlbl { background: none; border: 0; }
+  .mp-provlbl span { position: absolute; transform: translate(-50%, -50%); white-space: nowrap; font-size: 10.5px; font-weight: 700; color: #a52a17; text-shadow: 0 0 3px #fff, 0 0 3px #fff, 0 0 2px #fff; pointer-events: none; }
+  .mp-provlbl.sea span { font-style: italic; color: #1b4f8f; font-weight: 600; }
+
 </style>
 </head>
 <body>
@@ -1386,6 +1393,7 @@ svg.leaflet-image-layer.leaflet-interactive path {
           <select id="mpFNhom" aria-label="Lọc theo nhóm"></select>
           <button class="chip" id="mpFClear" style="display:none">✕ Bỏ lọc</button>
           <span class="sp"></span>
+          <button class="chip active" id="mpProv" title="Bật/tắt đường địa giới 34 tỉnh/thành">▦ Địa giới 34 tỉnh</button>
           <button class="chip" id="mpFit">⤢ Xem tất cả</button>
           <span id="mpBase" style="display:inline-flex;gap:4px"><button class="chip active" data-base="osm">🗺 Bản đồ</button><button class="chip" data-base="sat">🛰 Vệ tinh</button></span>
         </div>
@@ -1431,6 +1439,7 @@ function jsonToData(rows) {
       banveCTDT: p['Bản vẽ đã duyệt CTĐT'] || '',
       banveQH500: p['Bản vẽ đã duyệt QH 1/500'] || '',
       maps: p['Maps (ranh giới dự án)'] || '',
+      dientich: (function(){ for (const k in p) { if (/di[eệ]n\s*t[ií]ch/i.test(k)) return p[k] || ''; } return ''; })(),
       video: p['Video hiện trạng'] || '',
     });
   }
@@ -1852,12 +1861,11 @@ setInterval(() => loadData(false), 300000);
     ALL.forEach((o) => {
       o.dash = dm.get(norm(o.name)) || null;
       o.fromMyMaps = false;
-      o.shapes = null; o.areaHa = 0;
+      o.shapes = null; o.areaHa = dashArea(o.dash);
       const sh = SHAPES.get(norm(o.name));
       if (sh && sh.f && sh.f.length) {
         o.shapes = sh; o.fromMyMaps = true;
-        sh.f.forEach((ft) => { if (ft.t === 'p') o.areaHa += polyAreaHa(ft.c); });
-        if (!(o.pos && o.pos.ok)) { // chưa nhập vị trí tay -> lấy tâm của ranh giới
+                if (!(o.pos && o.pos.ok)) { // chưa nhập vị trí tay -> lấy tâm của ranh giới
           let sx = 0, sy = 0, n = 0; sh.f.forEach((ft) => ft.c.forEach((p) => { sx += p[0]; sy += p[1]; n++; }));
           if (n) { o.pos = { ok: true, lat: sy / n, lng: sx / n, url: sh.url, raw: '' }; o.posWarn = ''; }
         }
@@ -2003,10 +2011,10 @@ setInterval(() => loadData(false), 300000);
     return x.date ? fmt(x.date) + so : '<span class="none">chưa nhập ngày</span>' + so;
   }
   function linkBtns(o, withAct, i) {
-    return btn(o.ctdt.pdf, '📄 Văn bản CTĐT') + btn(o.qd.pdf, '📄 Quyết định phê duyệt') + (o.qd.has ? btn(o.banve, '📐 Bản vẽ đã duyệt') : '') +
+    return btn(o.ctdt.pdf, '📄 Văn bản CTĐT') + '<span class="btn-pair">' + btn(o.qd.pdf, '📄 Quyết định') + (o.qd.has ? btn(o.banve, '📐 Bản vẽ') : '') + '</span>' +
       btn(o.mapsUrl, '📍 Google Maps') +
       (withAct ? ((o.ctdt.date || o.qd.date) ? '<button class="drawing-btn" data-act="tl" data-i="' + i + '">🕒 Timeline</button>' : '') +
-        (o.pos && o.pos.ok ? '<button class="drawing-btn" data-act="map" data-i="' + i + '">🗺 Xem trên bản đồ</button>' : '') : '');
+        ((o.shapes || (o.pos && o.pos.ok)) ? '<button class="drawing-btn" data-act="map" data-i="' + i + '">🗺 Xem trên bản đồ</button>' : '') : '');
   }
   // thẻ: cùng khung với thẻ ở tab "Tổng hợp dự án"
   function cardHtml(o, i) {
@@ -2201,15 +2209,33 @@ setInterval(() => loadData(false), 300000);
 
   /* ---------- Bản đồ (Leaflet): ranh giới từng dự án ---------- */
   const MF = { prov: '', type: '', nhom: '' };
-  const LM = { map: null, built: false, tiles: {}, base: 'osm', gShapes: null, gMarks: null, items: [], sel: -1, needFit: true };
+  const LM = { showProv: true, gProv: null, gProvLbl: null, map: null, built: false, tiles: {}, base: 'osm', gShapes: null, gMarks: null, items: [], sel: -1, needFit: true };
 
-  function polyAreaHa(c) { // đa giác [[kinh, vĩ]…] -> ha (xấp xỉ phẳng, đủ cho quy mô dự án)
-    if (c.length < 3) return 0;
-    let la0 = 0; c.forEach((p) => { la0 += p[1]; }); la0 /= c.length;
-    const kx = 111320 * Math.cos(la0 * Math.PI / 180), ky = 110540;
-    let s = 0;
-    for (let i = 0, j = c.length - 1; i < c.length; j = i++) s += (c[j][0] * kx) * (c[i][1] * ky) - (c[i][0] * kx) * (c[j][1] * ky);
-    return Math.abs(s) / 2 / 1e4;
+  // Diện tích lấy từ Dashboard: cột có tên chứa "diện tích"; nếu không có thì tìm "… ha/m2" trong Tóm tắt dự án, rồi trong tên dự án
+  function parseNum(t) {
+    t = String(t).trim();
+    if (t.indexOf('.') >= 0 && t.indexOf(',') >= 0) return parseFloat(t.replace(/\./g, '').replace(',', '.'));
+    if (/^\d{1,3}(\.\d{3})+$/.test(t)) return parseFloat(t.replace(/\./g, ''));
+    return parseFloat(t.replace(',', '.'));
+  }
+  function areaFromText(txt, needKw) {
+    const re = needKw ? /di[eệ]n t[ií]ch[^0-9]{0,40}([\d][\d.,]*)\s*(ha|m2|m²|km2|km²)?/i : /([\d][\d.,]*)\s*(ha)\b/i;
+    const m = String(txt || '').match(re); if (!m) return 0;
+    let v = parseNum(m[1]); if (!isFinite(v)) return 0;
+    const u = (m[2] || 'ha').toLowerCase();
+    if (u === 'm2' || u === 'm²') v /= 1e4; else if (u === 'km2' || u === 'km²') v *= 100;
+    return v;
+  }
+  function dashArea(d) {
+    if (!d) return 0;
+    if (d.dientich) {
+      const m = String(d.dientich).match(/([\d][\d.,]*)\s*(ha|m2|m²|km2|km²)?/i);
+      if (m) {
+        let v = parseNum(m[1]); const u = (m[2] || '').toLowerCase();
+        if (isFinite(v)) { if (u === 'm2' || u === 'm²' || (!u && v >= 1000)) v /= 1e4; else if (u === 'km2' || u === 'km²') v *= 100; if (v > 0) return v; }
+      }
+    }
+    return areaFromText(d.tomtat, true) || areaFromText(d.ten, false);
   }
   const fmtHa = (v) => (v >= 100 ? Math.round(v) : v >= 10 ? v.toFixed(1) : v.toFixed(2)).toString().replace('.', ',');
 
@@ -2243,13 +2269,47 @@ setInterval(() => loadData(false), 300000);
     LM.tiles.osm = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' });
     LM.tiles.sat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19, attribution: 'Ảnh: Esri, Maxar, Earthstar Geographics' });
     LM.tiles.osm.addTo(map);
+    LM.gProv = L.layerGroup(); LM.gProvLbl = L.layerGroup();
+    buildProvLayer();
+    if (LM.showProv) { LM.gProv.addTo(map); }
+    map.on('zoomend', provLabels);
     LM.gShapes = L.featureGroup().addTo(map);
     LM.gMarks = L.layerGroup().addTo(map);
     map.on('zoomend', layoutMarks);
     LM.built = true;
+    provLabels();
+  }
+  // địa giới 34 tỉnh/thành (đường nét đơn giản hóa, đổi từ dữ liệu bản đồ có sẵn sang kinh/vĩ độ)
+  function buildProvLayer() {
+    const toLL = (x, y) => [MAP.LAT1 - y / MAP.K, MAP.LON0 + x / (MAP.K * MAP.CX)];
+    MAP.prov.forEach((p) => {
+      const rings = []; String(p.d).split('M').forEach((seg) => {
+        const nums = seg.replace(/Z/g, '').split(/[LZ\s]+/).filter(Boolean).map(Number); if (nums.length < 6) return;
+        const r = []; for (let i = 0; i + 1 < nums.length; i += 2) r.push(toLL(nums[i], nums[i + 1])); rings.push([r]);
+      });
+      L.polygon(rings, { color: '#d0361f', weight: 1.4, opacity: 0.85, fill: false, interactive: false, dashArray: '6 4' }).addTo(LM.gProv);
+      p._ll = toLL(p.cx, p.cy);
+    });
+  }
+  function provLabels() {
+    LM.gProvLbl.clearLayers();
+    if (!LM.map || !LM.showProv) { if (LM.map && LM.map.hasLayer(LM.gProvLbl)) LM.map.removeLayer(LM.gProvLbl); return; }
+    if (!LM.map.hasLayer(LM.gProvLbl)) LM.gProvLbl.addTo(LM.map);
+    const z = LM.map.getZoom();
+    if (z > 11) return;
+    MAP.prov.forEach((p) => L.marker(p._ll, { interactive: false, keyboard: false, icon: L.divIcon({ className: 'mp-provlbl', html: '<span>' + esc(p.name) + '</span>', iconSize: [0, 0] }) }).addTo(LM.gProvLbl));
+    [['Q.đ Hoàng Sa (Đà Nẵng)', MAP.hs], ['Q.đ Trường Sa (Khánh Hòa)', MAP.ts]].forEach((q) => L.marker(toLLm(q[1]), { interactive: false, keyboard: false, icon: L.divIcon({ className: 'mp-provlbl sea', html: '<span>' + q[0] + '</span>', iconSize: [0, 0] }) }).addTo(LM.gProvLbl));
+  }
+  const toLLm = (xy) => [MAP.LAT1 - xy[1] / MAP.K, MAP.LON0 + xy[0] / (MAP.K * MAP.CX)];
+  function setProv(on) {
+    LM.showProv = on; $('mpProv').classList.toggle('active', on);
+    if (!LM.built) return;
+    if (on) LM.gProv.addTo(LM.map); else LM.map.removeLayer(LM.gProv);
+    provLabels();
   }
   function setBase(b) {
     LM.base = b;
+    $('mpProv').addEventListener('click', () => setProv(!LM.showProv));
     document.querySelectorAll('#mpBase .chip').forEach((c) => c.classList.toggle('active', c.dataset.base === b));
     if (!LM.built) return;
     Object.keys(LM.tiles).forEach((k) => { if (k !== b && LM.map.hasLayer(LM.tiles[k])) LM.map.removeLayer(LM.tiles[k]); });
@@ -2362,14 +2422,14 @@ setInterval(() => loadData(false), 300000);
     ids.forEach((i) => { const o = LEGAL[i]; st[o.status][0]++; st[o.status][1] += o.areaHa || 0; tot += o.areaHa || 0; if (!o.areaHa) noArea++; });
     const box = (cls, num, label, ha) => '<div class="mp-stat ' + cls + (cls !== 'all' && !LS.on[cls] ? ' off' : '') + '"' + (cls !== 'all' ? ' data-st="' + cls + '" role="button" tabindex="0" title="Bấm để ẩn/hiện"' : '') + '><b>' + num + '</b><span>' + label + '</span><em>' + (ha == null ? '' : fmtHa(ha) + ' ha') + '</em></div>';
     $('mpStats').innerHTML = box('all', ids.length, 'Dự án trên bản đồ', tot) + box('qd', st.qd[0], 'Đã có QĐ phê duyệt', st.qd[1]) + box('ctdt', st.ctdt[0], 'Đã duyệt CTĐT', st.ctdt[1]) + box('nc', st.nc[0], 'Đang nghiên cứu', st.nc[1]);
-    $('mpStatNote').textContent = noArea ? 'Diện tích tính từ đa giác ranh giới (ước lượng); ' + noArea + ' dự án chưa có đa giác nên không tính diện tích.' : 'Diện tích tính từ đa giác ranh giới (ước lượng).';
+    $('mpStatNote').textContent = noArea ? 'Diện tích lấy từ dữ liệu nhập ở Dashboard; ' + noArea + ' dự án chưa có số liệu diện tích nên chưa cộng vào.' : 'Diện tích lấy từ dữ liệu nhập ở Dashboard.';
   }
   function itemHtml(o, i, full) {
     const so = (x) => (x ? ' · ' + esc(x) : '');
     return '<div class="mp-item ' + o.status + '"><b>' + esc(o.name) + '</b><div class="m"><span class="lg-badge ' + o.status + '">' + ST[o.status].label + '</span>' + (o.prov ? ' <span>📍 ' + esc(o.prov.name) + '</span>' : '') + (o.areaHa ? ' <span>· ' + fmtHa(o.areaHa) + ' ha</span>' : '') + '<br>' +
       (o.ctdt.has ? 'CTĐT: ' + (o.ctdt.date ? fmt(o.ctdt.date) : 'chưa nhập ngày') + so(o.ctdt.so) + '<br>' : '') + (o.qd.has ? 'QĐ phê duyệt: ' + (o.qd.date ? fmt(o.qd.date) : 'chưa nhập ngày') + so(o.qd.so) + '<br>' : '') +
       (o.tiendo ? 'Tiến độ: ' + esc(o.tiendo) + (o.pct != null ? ' (' + o.pct + '%)' : '') : (o.pct != null ? 'Tiến độ: ' + o.pct + '%' : '')) + '</div>' +
-      '<div class="lg-btns">' + btn(o.ctdt.pdf, '📄 Văn bản CTĐT') + btn(o.qd.pdf, '📄 Quyết định phê duyệt') + (o.qd.has ? btn(o.banve, '📐 Bản vẽ đã duyệt') : '') + btn(o.mapsUrl, '📍 Google Maps') +
+      '<div class="lg-btns">' + btn(o.ctdt.pdf, '📄 Văn bản CTĐT') + '<span class="btn-pair">' + btn(o.qd.pdf, '📄 Quyết định') + (o.qd.has ? btn(o.banve, '📐 Bản vẽ') : '') + '</span>' + btn(o.mapsUrl, '📍 Google Maps') +
       ((o.ctdt.date || o.qd.date) ? '<button class="drawing-btn" data-act="tl" data-i="' + i + '">🕒 Timeline</button>' : '') +
       (full ? '' : '<button class="drawing-btn" data-act="focus" data-i="' + i + '">🎯 Phóng tới đây</button>') + '</div></div>';
   }
