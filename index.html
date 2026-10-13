@@ -1272,6 +1272,10 @@ svg.leaflet-image-layer.leaflet-interactive path {
   .lg-table td.nt { width: 1%; min-width: 90px; max-width: 160px; font-size: 12px; }
   .lg-table td .lg-btns { gap: 5px; }
 
+  .mp-sum { margin: 8px 0 8px; padding: 8px 10px; background: #f4f7fb; border: 1px solid var(--line); border-radius: 10px; font-size: 12.5px; line-height: 1.5; color: #28344a; }
+  .mp-sum .k { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin-bottom: 3px; }
+  .mp-sum .ln { margin: 2px 0; }
+
 </style>
 </head>
 <body>
@@ -2288,7 +2292,12 @@ setInterval(() => loadData(false), 300000);
         const nums = seg.replace(/Z/g, '').split(/[LZ\s]+/).filter(Boolean).map(Number); if (nums.length < 6) return;
         const r = []; for (let i = 0; i + 1 < nums.length; i += 2) r.push(toLL(nums[i], nums[i + 1])); rings.push([r]);
       });
-      L.polygon(rings, { color: '#d0361f', weight: 1.4, opacity: 0.85, fill: false, interactive: false, dashArray: '6 4' }).addTo(LM.gProv);
+      const poly = L.polygon(rings, { color: '#d0361f', weight: 1.4, opacity: 0.85, fill: true, fillOpacity: 0, interactive: true, dashArray: '6 4' }).addTo(LM.gProv);
+      poly.bindTooltip(p.name, { sticky: true, className: 'mp-tip' });
+      poly.on('mouseover', () => poly.setStyle({ weight: 2.4, fillOpacity: 0.06 }));
+      poly.on('mouseout', () => poly.setStyle({ weight: 1.4, fillOpacity: 0 }));
+      p._poly = poly;
+      let big = null, ba = -1; rings.forEach((rg) => { const bb = L.latLngBounds(rg[0]), a = (bb.getNorth() - bb.getSouth()) * (bb.getEast() - bb.getWest()); if (a > ba) { ba = a; big = bb; } }); p._bb = big; // chỉ tính phần đất liền/đảo lớn nhất
       p._ll = toLL(p.cx, p.cy);
     });
   }
@@ -2297,9 +2306,15 @@ setInterval(() => loadData(false), 300000);
     if (!LM.map || !LM.showProv) { if (LM.map && LM.map.hasLayer(LM.gProvLbl)) LM.map.removeLayer(LM.gProvLbl); return; }
     if (!LM.map.hasLayer(LM.gProvLbl)) LM.gProvLbl.addTo(LM.map);
     const z = LM.map.getZoom();
-    if (z > 11) return;
-    MAP.prov.forEach((p) => L.marker(p._ll, { interactive: false, keyboard: false, icon: L.divIcon({ className: 'mp-provlbl', html: '<span>' + esc(p.name) + '</span>', iconSize: [0, 0] }) }).addTo(LM.gProvLbl));
-    [['Q.đ Hoàng Sa (Đà Nẵng)', MAP.hs], ['Q.đ Trường Sa (Khánh Hòa)', MAP.ts]].forEach((q) => L.marker(toLLm(q[1]), { interactive: false, keyboard: false, icon: L.divIcon({ className: 'mp-provlbl sea', html: '<span>' + q[0] + '</span>', iconSize: [0, 0] }) }).addTo(LM.gProvLbl));
+    // chỉ ghi tên khi chữ nhỏ hơn ranh giới tỉnh trên màn hình (zoom đủ gần); zoom xa thì rê chuột vào mới hiện tên
+    if (z <= 11) MAP.prov.forEach((p) => {
+      if (!p._poly) return;
+      const b = p._bb, sw = LM.map.latLngToContainerPoint(b.getSouthWest()), ne = LM.map.latLngToContainerPoint(b.getNorthEast());
+      const w = Math.abs(ne.x - sw.x), h = Math.abs(sw.y - ne.y), tw = p.name.length * 6.6 + 10;
+      if (w < tw * 1.6 || h < 40) return;
+      L.marker(p._ll, { interactive: false, keyboard: false, icon: L.divIcon({ className: 'mp-provlbl', html: '<span>' + esc(p.name) + '</span>', iconSize: [0, 0] }) }).addTo(LM.gProvLbl);
+    });
+    if (z >= 6.5 && z <= 9) [['Q.đ Hoàng Sa (Đà Nẵng)', MAP.hs], ['Q.đ Trường Sa (Khánh Hòa)', MAP.ts]].forEach((q) => L.marker(toLLm(q[1]), { interactive: false, keyboard: false, icon: L.divIcon({ className: 'mp-provlbl sea', html: '<span>' + q[0] + '</span>', iconSize: [0, 0] }) }).addTo(LM.gProvLbl));
   }
   const toLLm = (xy) => [MAP.LAT1 - xy[1] / MAP.K, MAP.LON0 + xy[0] / (MAP.K * MAP.CX)];
   function setProv(on) {
@@ -2315,6 +2330,7 @@ setInterval(() => loadData(false), 300000);
     if (!LM.built) return;
     Object.keys(LM.tiles).forEach((k) => { if (k !== b && LM.map.hasLayer(LM.tiles[k])) LM.map.removeLayer(LM.tiles[k]); });
     LM.tiles[b].addTo(LM.map); LM.tiles[b].bringToBack();
+    restyle();
   }
 
   function drawAll(ids) {
@@ -2344,10 +2360,15 @@ setInterval(() => loadData(false), 300000);
     layoutMarks();
   }
   function restyle() {
+    const sat = LM.base === 'sat';
     LM.items.forEach((it) => {
       if (!it.grp) return;
       const on = it.i === LM.sel || (LS.mapSel && LS.mapSel.ids.indexOf(it.i) >= 0 && LS.mapSel.ids.length === 1);
-      it.grp.eachLayer((l) => { if (l.setStyle && !(l instanceof L.CircleMarker)) l.setStyle({ weight: on ? 4 : 2, fillOpacity: on ? 0.5 : 0.3, color: on ? '#12233f' : it.col }); });
+      // đang xem 1 dự án: viền đỏ nét đứt; ảnh vệ tinh: ranh giới đỏ tươi cho dễ thấy; bản đồ thường: màu theo giai đoạn
+      const st = on ? { color: '#ff1a1a', weight: 3.5, dashArray: '9 6', fillColor: '#ff1a1a', fillOpacity: 0.1, opacity: 1 }
+        : sat ? { color: '#ff2a2a', weight: 2.6, dashArray: null, fillColor: '#ff2a2a', fillOpacity: 0.12, opacity: 1 }
+        : { color: it.col, weight: 2, dashArray: null, fillColor: it.col, fillOpacity: 0.3, opacity: 1 };
+      it.grp.eachLayer((l) => { if (l.setStyle && !(l instanceof L.CircleMarker)) l.setStyle(st); });
       if (on) it.grp.bringToFront();
     });
   }
@@ -2425,11 +2446,17 @@ setInterval(() => loadData(false), 300000);
     $('mpStats').innerHTML = box('all', ids.length, 'Dự án trên bản đồ', tot) + box('qd', st.qd[0], 'Đã có QĐ phê duyệt', st.qd[1]) + box('ctdt', st.ctdt[0], 'Đã duyệt CTĐT', st.ctdt[1]) + box('nc', st.nc[0], 'Đang nghiên cứu', st.nc[1]);
     $('mpStatNote').textContent = noArea ? 'Diện tích lấy từ dữ liệu nhập ở Dashboard; ' + noArea + ' dự án chưa có số liệu diện tích nên chưa cộng vào.' : 'Diện tích lấy từ dữ liệu nhập ở Dashboard.';
   }
+  function sumHtml(o) {
+    const lines = String(o.dash.tomtat).split(/\r?\n+/).map((x) => x.trim()).filter(Boolean);
+    const hi = (t) => esc(t).replace(/(di[eệ]n t[ií]ch|t[aầ]ng cao|s[oố] t[aầ]ng|m[aậ]t độ|quy m[oô]|d[aâ]n s[oố]|h[eệ] s[oố]|t[oổ]ng m[uứ]c đ[aầ]u t[uư]|[\d][\d.,]*\s*(?:ha|m2|m²|t[aầ]ng|căn|người))/gi, '<b>$1</b>');
+    return (o.areaHa && !/di[eệ]n t[ií]ch/i.test(o.dash.tomtat) ? '<div class="ln"><b>Diện tích: ' + fmtHa(o.areaHa) + ' ha</b></div>' : '') + lines.map((l) => '<div class="ln">' + hi(l) + '</div>').join('');
+  }
   function itemHtml(o, i, full) {
     const so = (x) => (x ? ' · ' + esc(x) : '');
     return '<div class="mp-item ' + o.status + '"><b>' + esc(o.name) + '</b><div class="m"><span class="lg-badge ' + o.status + '">' + ST[o.status].label + '</span>' + (o.prov ? ' <span>📍 ' + esc(o.prov.name) + '</span>' : '') + (o.areaHa ? ' <span>· ' + fmtHa(o.areaHa) + ' ha</span>' : '') + '<br>' +
       (o.ctdt.has ? 'CTĐT: ' + (o.ctdt.date ? fmt(o.ctdt.date) : 'chưa nhập ngày') + so(o.ctdt.so) + '<br>' : '') + (o.qd.has ? 'QĐ phê duyệt: ' + (o.qd.date ? fmt(o.qd.date) : 'chưa nhập ngày') + so(o.qd.so) + '<br>' : '') +
       (o.tiendo ? 'Tiến độ: ' + esc(o.tiendo) + (o.pct != null ? ' (' + o.pct + '%)' : '') : (o.pct != null ? 'Tiến độ: ' + o.pct + '%' : '')) + '</div>' +
+      (full && o.dash && o.dash.tomtat ? '<div class="mp-sum"><div class="k">Tóm tắt dự án (từ Dashboard)</div>' + sumHtml(o) + '</div>' : '') +
       '<div class="lg-btns">' + docBtns(o) + btn(o.mapsUrl, '📍 GG Maps') +
       ((o.ctdt.date || o.qd.date) ? '<button class="drawing-btn" data-act="tl" data-i="' + i + '">🕒 Timeline</button>' : '') +
       (full ? '' : '<button class="drawing-btn" data-act="focus" data-i="' + i + '">🎯 Phóng tới đây</button>') + '</div></div>';
